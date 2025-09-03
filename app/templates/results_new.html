@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis Results - Plagiarism Checker{% endblock %}
+
+{% block head %}
+<style>
+    .progress-bar {
+        transition: width 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="h3 mb-0 text-gray-800">Analysis Results</h2>
+            <a href="/" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Upload
+            </a>
+        </div>
+        
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Document Analysis Summary</h6>
+                <span class="badge bg-primary">{{ results|length }} Document{% if results|length != 1 %}s{% endif %} Analyzed</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Document</th>
+                                <th>Word Count</th>
+                                <th>AI Detection</th>
+                                <th>Similarity</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in results %}
+                            <tr class="align-middle">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-file-word text-primary me-2"></i>
+                                        <div>
+                                            <div class="fw-bold">{{ row["Unique Document"][:30] }}{% if row["Unique Document"]|length > 30 %}...{% endif %}</div>
+                                            <small class="text-muted">Just now</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark">{{ row["Word Count"]|replace('Word Count: ', '') }}</span>
+                                </td>
+                                <td>
+                                    {% set ai_percent = row["AI %"]|replace('AI Percentage: ', '')|replace('%', '')|int %}
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                            <div class="progress-bar" 
+                                                 role="progressbar" 
+                                                 data-percent="{{ ai_percent }}" 
+                                                 data-type="ai"
+                                                 style="width: 0%"
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <span class="fw-bold text-{{ 'danger' if ai_percent > 50 else 'warning' }}" data-percent="{{ ai_percent }}" data-type="ai-text">{{ ai_percent }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% set similarity_percent = row["Similarity %"]|replace('Similarity Percentage: ', '')|replace('%', '')|int %}
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                            <div class="progress-bar" 
+                                                 role="progressbar" 
+                                                 data-percent="{{ similarity_percent }}" 
+                                                 data-type="similarity"
+                                                 style="width: 0%"
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <span class="fw-bold text-{{ 'danger' if similarity_percent > 50 else 'success' }}" data-percent="{{ similarity_percent }}" data-type="similarity-text">{{ similarity_percent }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('download_file', filename=row['Report File']) }}" 
+                                       class="btn btn-sm btn-outline-primary"
+                                       title="Download Report">
+                                        <i class="fas fa-download"></i> Report
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="alert alert-info">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-info-circle me-2"></i>
+                <div>
+                    <h6 class="alert-heading mb-1">About the Results</h6>
+                    <p class="mb-0 small">
+                        AI Detection shows the likelihood of content being AI-generated. 
+                        Similarity indicates potential matches with other sources. 
+                        For detailed analysis, download the full report.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize progress bars
+        document.querySelectorAll('.progress-bar').forEach(bar => {
+            const percent = parseInt(bar.dataset.percent) || 0;
+            const type = bar.dataset.type;
+            
+            // Set appropriate color based on percentage and type
+            if (type === 'ai') {
+                bar.classList.add(percent > 50 ? 'bg-danger' : 'bg-warning');
+            } else if (type === 'similarity') {
+                bar.classList.add(percent > 50 ? 'bg-danger' : 'bg-success');
+            }
+            
+            // Animate the progress bar
+            setTimeout(() => {
+                bar.style.width = percent + '%';
+                bar.setAttribute('aria-valuenow', percent);
+            }, 100);
+        });
+        
+        // Update text colors for percentage indicators
+        document.querySelectorAll('[data-type$="-text"]').forEach(el => {
+            const percent = parseInt(el.dataset.percent) || 0;
+            const type = el.dataset.type.replace('-text', '');
+            
+            el.classList.remove('text-warning', 'text-danger', 'text-success');
+            
+            if (type === 'ai') {
+                el.classList.add(percent > 50 ? 'text-danger' : 'text-warning');
+            } else if (type === 'similarity') {
+                el.classList.add(percent > 50 ? 'text-danger' : 'text-success');
+            }
+        });
+    });
+</script>
+{% endblock %}
