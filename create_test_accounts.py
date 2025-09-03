@@ -21,72 +21,52 @@ def create_test_accounts():
         {
             'username': 'john_researcher',
             'email': 'john.researcher@test.com',
-            'password': 'test123',
-            'first_name': 'John',
-            'last_name': 'Researcher'
+            'password': 'test123'
         },
         {
             'username': 'sarah_academic',
             'email': 'sarah.academic@test.com',
-            'password': 'test123',
-            'first_name': 'Sarah',
-            'last_name': 'Academic'
+            'password': 'test123'
         },
         {
             'username': 'mike_professor',
             'email': 'mike.professor@test.com',
-            'password': 'test123',
-            'first_name': 'Mike',
-            'last_name': 'Professor'
+            'password': 'test123'
         },
         {
             'username': 'emma_student',
             'email': 'emma.student@test.com',
-            'password': 'test123',
-            'first_name': 'Emma',
-            'last_name': 'Student'
+            'password': 'test123'
         },
         {
             'username': 'david_scholar',
             'email': 'david.scholar@test.com',
-            'password': 'test123',
-            'first_name': 'David',
-            'last_name': 'Scholar'
+            'password': 'test123'
         },
         {
             'username': 'lisa_educator',
             'email': 'lisa.educator@test.com',
-            'password': 'test123',
-            'first_name': 'Lisa',
-            'last_name': 'Educator'
+            'password': 'test123'
         },
         {
             'username': 'alex_writer',
             'email': 'alex.writer@test.com',
-            'password': 'test123',
-            'first_name': 'Alex',
-            'last_name': 'Writer'
+            'password': 'test123'
         },
         {
             'username': 'rachel_analyst',
             'email': 'rachel.analyst@test.com',
-            'password': 'test123',
-            'first_name': 'Rachel',
-            'last_name': 'Analyst'
+            'password': 'test123'
         },
         {
             'username': 'tom_investigator',
             'email': 'tom.investigator@test.com',
-            'password': 'test123',
-            'first_name': 'Tom',
-            'last_name': 'Investigator'
+            'password': 'test123'
         },
         {
             'username': 'jane_reviewer',
             'email': 'jane.reviewer@test.com',
-            'password': 'test123',
-            'first_name': 'Jane',
-            'last_name': 'Reviewer'
+            'password': 'test123'
         }
     ]
 

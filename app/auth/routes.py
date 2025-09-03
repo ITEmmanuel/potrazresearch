@@ -16,7 +16,7 @@ from ..extensions import login_manager
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     form = LoginForm()
     if form.validate_on_submit():
@@ -33,14 +33,14 @@ def login():
         login_user(user, remember=form.remember_me.data)
         next_page = request.args.get('next')
         flash('You have been logged in!', 'success')
-        return redirect(next_page or url_for('main.index'))
+        return redirect(next_page or url_for('main.dashboard'))
         
     return render_template('auth/login.html', form=form)
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
         
     form = RegistrationForm()
     if form.validate_on_submit():

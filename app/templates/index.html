@@ -185,8 +185,9 @@
     <!-- Header -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
         <div class="container">
-            <a class="navbar-brand fw-bold text-primary" href="#">
-                <i class="fas fa-shield-alt me-2"></i>POTRAZ Research
+            <a class="navbar-brand fw-bold text-primary d-flex align-items-center" href="#">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="POTRAZ" height="40" class="me-2">
+                POTRAZ Research
             </a>
             <div class="navbar-nav ms-auto">
                 <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-sm px-4">Sign In</a>
@@ -206,16 +207,13 @@
                         Ensure academic integrity with our cutting-edge plagiarism detection technology.
                         Trusted by researchers and institutions worldwide.
                     </p>
-                    <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg px-5 py-3 me-3">
-                        <i class="fas fa-user-plus me-2"></i>Create Account
-                    </a>
-                    <a href="{{ url_for('auth.login') }}" class="btn btn-outline-primary btn-lg px-5 py-3">
-                        Sign In
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-lg px-5 py-3">
+                        <i class="fas fa-sign-in-alt me-2"></i>Sign In
                     </a>
                 </div>
                 <div class="col-lg-6 text-center">
                     <div class="p-4">
-                        <i class="fas fa-search fa-6x text-primary opacity-75"></i>
+                        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="POTRAZ Research" class="img-fluid" style="max-width: 300px; opacity: 0.9;">
                     </div>
                 </div>
             </div>
@@ -306,8 +304,8 @@
             <p class="lead mb-4 opacity-90">
                 Join thousands of researchers who trust POTRAZ Research for their academic needs.
             </p>
-            <a href="{{ url_for('auth.register') }}" class="btn btn-light btn-lg px-5 py-3">
-                <i class="fas fa-rocket me-2"></i>Get Started Today
+            <a href="{{ url_for('auth.login') }}" class="btn btn-light btn-lg px-5 py-3">
+                <i class="fas fa-sign-in-alt me-2"></i>Sign In to Continue
             </a>
         </div>
     </section>
