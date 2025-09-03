@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: potplag_app
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
+      - DATABASE_URL=mysql+pymysql://potplag:${MYSQL_PASSWORD}@db:3306/potplag
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@potplag.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ACADEMI_EMAIL=${ACADEMI_EMAIL}
+      - ACADEMI_PASSWORD=${ACADEMI_PASSWORD}
+    volumes:
+      - uploads:/app/uploads
+      - downloads:/app/downloads
+      - status:/app/status
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: mysql:8.0
+    container_name: potplag_db
+    environment:
+      - MYSQL_DATABASE=potplag
+      - MYSQL_USER=potplag
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-secure_password}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: potplag_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: potplag_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - static_files:/usr/share/nginx/html/static
+    depends_on:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mysql_data:
+    driver: local
+  uploads:
+    driver: local
+  downloads:
+    driver: local
+  status:
+    driver: local
+  static_files:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

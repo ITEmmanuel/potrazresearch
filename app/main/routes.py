@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, send_from_directory, abort
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, send_from_directory, abort, jsonify
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -215,3 +215,21 @@ def delete_document(document_id):
     
     flash('Document deleted successfully', 'success')
     return redirect(url_for('main.dashboard'))
+
+@bp.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    try:
+        # Check database connection
+        db.session.execute('SELECT 1')
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'version': '1.0.0'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy', 
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
