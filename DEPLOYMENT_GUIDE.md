@@ -322,24 +322,61 @@ sudo systemctl enable nginx
 
 ## Step 7.1: Configure Custom Hostname and SSL Certificate
 
-### DNS Configuration (Using nip.io)
+### DNS Configuration Options
 
-**No DNS setup required!** We're using **nip.io**, a free wildcard DNS service that automatically resolves:
-- `potrazresearch.185.181.8.83.nip.io` → `185.181.8.83`
+Choose one of these professional domain options:
 
-This means:
-1. ✅ **No DNS provider needed**
-2. ✅ **No domain registration required** 
-3. ✅ **Works immediately**
-4. ✅ **Free custom hostname**
+#### **Option A: Free Professional Subdomain (Recommended)**
 
-You can verify this works by testing:
-```bash
-# Test DNS resolution (from any computer)
-ping potrazresearch.185.181.8.83.nip.io
+**FreeDNS (afraid.org)** - Clean URLs without IP addresses:
 
-# Should resolve to: 185.181.8.83
-```
+1. **Go to**: [https://freedns.afraid.org](https://freedns.afraid.org)
+2. **Create free account**
+3. **Add subdomain**: Choose from domains like:
+   - `potrazresearch.mooo.com`
+   - `potrazresearch.redirectme.net` 
+   - `potrazresearch.3utilities.com`
+4. **Point to**: `185.181.8.83`
+5. **Result**: Professional URL like `https://potrazresearch.mooo.com`
+
+#### **Option B: Register Your Own Domain (Most Professional)**
+
+**Recommended registrars**:
+- **Namecheap**: `potrazresearch.com` (~$9/year)
+- **Porkbun**: `potplag.com` (~$8/year)
+- **Cloudflare**: `potraz-research.org` (~$9/year)
+
+**DNS Setup**:
+1. Register domain
+2. Add A record: `@` → `185.181.8.83`
+3. Add A record: `www` → `185.181.8.83`
+
+#### **Option C: DuckDNS (Simple & Clean)**
+
+1. **Go to**: [https://www.duckdns.org](https://www.duckdns.org)
+2. **Login with GitHub/Google**
+3. **Create**: `potrazresearch.duckdns.org`
+4. **Set IP**: `185.181.8.83`
+5. **Result**: `https://potrazresearch.duckdns.org`
+
+---
+
+### **Quick Setup Example (FreeDNS)**
+
+Here's a complete example using FreeDNS for `potrazresearch.mooo.com`:
+
+1. **Create FreeDNS account**: [https://freedns.afraid.org](https://freedns.afraid.org)
+2. **Add subdomain**: 
+   - Type: `A`
+   - Subdomain: `potrazresearch`
+   - Domain: `mooo.com` (from dropdown)
+   - Destination: `185.181.8.83`
+3. **Test DNS**: `ping potrazresearch.mooo.com` (should return your IP)
+4. **Replace `YOUR_DOMAIN`** in all commands below with `potrazresearch.mooo.com`
+
+**Result**: Professional URL `https://potrazresearch.mooo.com` 🎉
+
+---
 
 ### Option 1: Let's Encrypt SSL Certificate (Recommended)
 
@@ -357,11 +394,15 @@ sudo ln -s /snap/bin/certbot /usr/bin/certbot
 sudo systemctl stop nginx
 
 # Generate SSL certificate for your custom domain
-sudo certbot certonly --standalone -d potrazresearch.185.181.8.83.nip.io
+# Replace YOUR_DOMAIN with your chosen domain (e.g., potrazresearch.mooo.com)
+sudo certbot certonly --standalone -d YOUR_DOMAIN
+
+# Example for FreeDNS:
+# sudo certbot certonly --standalone -d potrazresearch.mooo.com
 
 # The certificate will be stored in:
-# /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/fullchain.pem
-# /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/privkey.pem
+# /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem
+# /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem
 ```
 
 ### Create SSL-Enabled Nginx Configuration
@@ -375,18 +416,18 @@ sudo tee /etc/nginx/sites-available/potrazresearch << 'EOF'
 # Redirect HTTP to HTTPS
 server {
     listen 80;
-    server_name 185.181.8.83 185-181-8-83.cloud-xip.com potrazresearch.185.181.8.83.nip.io;
-    return 301 https://potrazresearch.185.181.8.83.nip.io$request_uri;
+    server_name 185.181.8.83 185-181-8-83.cloud-xip.com YOUR_DOMAIN;
+    return 301 https://YOUR_DOMAIN$request_uri;
 }
 
 # Main HTTPS server
 server {
     listen 443 ssl http2;
-    server_name potrazresearch.185.181.8.83.nip.io;
+    server_name YOUR_DOMAIN;
 
     # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem;
     
     # SSL Security Settings
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -471,7 +512,7 @@ sudo mkdir -p /etc/nginx/ssl
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -keyout /etc/nginx/ssl/potrazresearch.key \
     -out /etc/nginx/ssl/potrazresearch.crt \
-    -subj "/C=ZW/ST=Harare/L=Harare/O=POTRAZ/OU=Research/CN=potrazresearch.185.181.8.83.nip.io"
+    -subj "/C=ZW/ST=Harare/L=Harare/O=POTRAZ/OU=Research/CN=YOUR_DOMAIN"
 
 # Set proper permissions
 sudo chmod 600 /etc/nginx/ssl/potrazresearch.key
@@ -589,8 +630,8 @@ sudo tail -f /var/log/nginx/potrazresearch_error.log
 ## Access Your Application
 
 Your POTRAZ Research application should now be accessible at:
-- **HTTPS (Primary)**: https://potrazresearch.185.181.8.83.nip.io
-- **HTTP (Redirects to HTTPS)**: http://potrazresearch.185.181.8.83.nip.io
+- **HTTPS (Primary)**: https://YOUR_DOMAIN
+- **HTTP (Redirects to HTTPS)**: http://YOUR_DOMAIN
 - **Fallback URLs**: 
   - http://185.181.8.83 (redirects to HTTPS)
   - http://185-181-8-83.cloud-xip.com (redirects to HTTPS)
