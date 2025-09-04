@@ -322,6 +322,25 @@ sudo systemctl enable nginx
 
 ## Step 7.1: Configure Custom Hostname and SSL Certificate
 
+### DNS Configuration (Using nip.io)
+
+**No DNS setup required!** We're using **nip.io**, a free wildcard DNS service that automatically resolves:
+- `potrazresearch.185.181.8.83.nip.io` → `185.181.8.83`
+
+This means:
+1. ✅ **No DNS provider needed**
+2. ✅ **No domain registration required** 
+3. ✅ **Works immediately**
+4. ✅ **Free custom hostname**
+
+You can verify this works by testing:
+```bash
+# Test DNS resolution (from any computer)
+ping potrazresearch.185.181.8.83.nip.io
+
+# Should resolve to: 185.181.8.83
+```
+
 ### Option 1: Let's Encrypt SSL Certificate (Recommended)
 
 ```bash
@@ -338,11 +357,11 @@ sudo ln -s /snap/bin/certbot /usr/bin/certbot
 sudo systemctl stop nginx
 
 # Generate SSL certificate for your custom domain
-sudo certbot certonly --standalone -d potrazresearch.cloud-xip.com
+sudo certbot certonly --standalone -d potrazresearch.185.181.8.83.nip.io
 
 # The certificate will be stored in:
-# /etc/letsencrypt/live/potrazresearch.cloud-xip.com/fullchain.pem
-# /etc/letsencrypt/live/potrazresearch.cloud-xip.com/privkey.pem
+# /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/fullchain.pem
+# /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/privkey.pem
 ```
 
 ### Create SSL-Enabled Nginx Configuration
@@ -356,18 +375,18 @@ sudo tee /etc/nginx/sites-available/potrazresearch << 'EOF'
 # Redirect HTTP to HTTPS
 server {
     listen 80;
-    server_name 185.181.8.83 185-181-8-83.cloud-xip.com potrazresearch.cloud-xip.com;
-    return 301 https://potrazresearch.cloud-xip.com$request_uri;
+    server_name 185.181.8.83 185-181-8-83.cloud-xip.com potrazresearch.185.181.8.83.nip.io;
+    return 301 https://potrazresearch.185.181.8.83.nip.io$request_uri;
 }
 
 # Main HTTPS server
 server {
     listen 443 ssl http2;
-    server_name potrazresearch.cloud-xip.com;
+    server_name potrazresearch.185.181.8.83.nip.io;
 
     # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/potrazresearch.cloud-xip.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/potrazresearch.cloud-xip.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/potrazresearch.185.181.8.83.nip.io/privkey.pem;
     
     # SSL Security Settings
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -452,7 +471,7 @@ sudo mkdir -p /etc/nginx/ssl
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -keyout /etc/nginx/ssl/potrazresearch.key \
     -out /etc/nginx/ssl/potrazresearch.crt \
-    -subj "/C=ZW/ST=Harare/L=Harare/O=POTRAZ/OU=Research/CN=potrazresearch.cloud-xip.com"
+    -subj "/C=ZW/ST=Harare/L=Harare/O=POTRAZ/OU=Research/CN=potrazresearch.185.181.8.83.nip.io"
 
 # Set proper permissions
 sudo chmod 600 /etc/nginx/ssl/potrazresearch.key
@@ -570,8 +589,8 @@ sudo tail -f /var/log/nginx/potrazresearch_error.log
 ## Access Your Application
 
 Your POTRAZ Research application should now be accessible at:
-- **HTTPS (Primary)**: https://potrazresearch.cloud-xip.com
-- **HTTP (Redirects to HTTPS)**: http://potrazresearch.cloud-xip.com
+- **HTTPS (Primary)**: https://potrazresearch.185.181.8.83.nip.io
+- **HTTP (Redirects to HTTPS)**: http://potrazresearch.185.181.8.83.nip.io
 - **Fallback URLs**: 
   - http://185.181.8.83 (redirects to HTTPS)
   - http://185-181-8-83.cloud-xip.com (redirects to HTTPS)
