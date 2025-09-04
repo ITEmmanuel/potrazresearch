@@ -249,7 +249,7 @@ sudo rm /etc/nginx/sites-enabled/default
 sudo tee /etc/nginx/sites-available/potrazresearch << 'EOF'
 server {
     listen 80;
-    server_name 185.181.8.83 185-181-8-83.cloud-xip.com;
+    server_name 185.181.8.83 185-181-8-83.cloud-xip.com potrazresearch.cloud-xip.com;
 
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -318,6 +318,150 @@ sudo systemctl restart nginx
 
 # Enable nginx to start on boot
 sudo systemctl enable nginx
+```
+
+## Step 7.1: Configure Custom Hostname and SSL Certificate
+
+### Option 1: Let's Encrypt SSL Certificate (Recommended)
+
+```bash
+# Install Certbot for automatic SSL certificate management
+sudo apt update
+sudo apt install snapd -y
+sudo snap install core; sudo snap refresh core
+sudo snap install --classic certbot
+
+# Create a symlink to certbot
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+
+# Stop nginx temporarily for certificate generation
+sudo systemctl stop nginx
+
+# Generate SSL certificate for your custom domain
+sudo certbot certonly --standalone -d potrazresearch.cloud-xip.com
+
+# The certificate will be stored in:
+# /etc/letsencrypt/live/potrazresearch.cloud-xip.com/fullchain.pem
+# /etc/letsencrypt/live/potrazresearch.cloud-xip.com/privkey.pem
+```
+
+### Create SSL-Enabled Nginx Configuration
+
+```bash
+# Backup the existing configuration
+sudo cp /etc/nginx/sites-available/potrazresearch /etc/nginx/sites-available/potrazresearch.backup
+
+# Create new SSL-enabled configuration
+sudo tee /etc/nginx/sites-available/potrazresearch << 'EOF'
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name 185.181.8.83 185-181-8-83.cloud-xip.com potrazresearch.cloud-xip.com;
+    return 301 https://potrazresearch.cloud-xip.com$request_uri;
+}
+
+# Main HTTPS server
+server {
+    listen 443 ssl http2;
+    server_name potrazresearch.cloud-xip.com;
+
+    # SSL Configuration
+    ssl_certificate /etc/letsencrypt/live/potrazresearch.cloud-xip.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/potrazresearch.cloud-xip.com/privkey.pem;
+    
+    # SSL Security Settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+
+    # Serve static files directly
+    location /static/ {
+        alias /var/www/potrazresearch/app/static/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+        
+        # Handle missing files gracefully
+        try_files $uri $uri/ =404;
+        
+        # Security headers for static files
+        add_header X-Content-Type-Options nosniff;
+        
+        # MIME type handling
+        location ~* \.(js|css)$ {
+            add_header Cache-Control "public, max-age=2592000";
+        }
+        
+        location ~* \.(jpg|jpeg|png|gif|ico|svg)$ {
+            add_header Cache-Control "public, max-age=31536000";
+        }
+    }
+
+    # Handle file uploads (larger files)
+    client_max_body_size 20M;
+
+    # Main application
+    location / {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+        proxy_read_timeout 300;
+        proxy_pass http://127.0.0.1:5000;
+    }
+
+    # Logging
+    access_log /var/log/nginx/potrazresearch_access.log;
+    error_log /var/log/nginx/potrazresearch_error.log;
+}
+EOF
+
+# Test the new configuration
+sudo nginx -t
+
+# Start nginx
+sudo systemctl start nginx
+
+# Set up automatic certificate renewal
+sudo certbot renew --dry-run
+
+# Create a cron job for automatic renewal
+echo "0 12 * * * /usr/bin/certbot renew --quiet" | sudo crontab -
+```
+
+### Option 2: Self-Signed Certificate (For Testing)
+
+If you want to test SSL without Let's Encrypt:
+
+```bash
+# Create directory for SSL certificates
+sudo mkdir -p /etc/nginx/ssl
+
+# Generate self-signed certificate
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/potrazresearch.key \
+    -out /etc/nginx/ssl/potrazresearch.crt \
+    -subj "/C=ZW/ST=Harare/L=Harare/O=POTRAZ/OU=Research/CN=potrazresearch.cloud-xip.com"
+
+# Set proper permissions
+sudo chmod 600 /etc/nginx/ssl/potrazresearch.key
+sudo chmod 644 /etc/nginx/ssl/potrazresearch.crt
+
+# Use self-signed certificates in nginx config
+# Replace the SSL certificate lines in the config above with:
+# ssl_certificate /etc/nginx/ssl/potrazresearch.crt;
+# ssl_certificate_key /etc/nginx/ssl/potrazresearch.key;
 ```
 
 ## Step 8: Configure Firewall
@@ -426,8 +570,11 @@ sudo tail -f /var/log/nginx/potrazresearch_error.log
 ## Access Your Application
 
 Your POTRAZ Research application should now be accessible at:
-- **HTTP**: http://185.181.8.83
-- **HTTP**: http://185-181-8-83.cloud-xip.com
+- **HTTPS (Primary)**: https://potrazresearch.cloud-xip.com
+- **HTTP (Redirects to HTTPS)**: http://potrazresearch.cloud-xip.com
+- **Fallback URLs**: 
+  - http://185.181.8.83 (redirects to HTTPS)
+  - http://185-181-8-83.cloud-xip.com (redirects to HTTPS)
 
 ### Login Credentials
 
