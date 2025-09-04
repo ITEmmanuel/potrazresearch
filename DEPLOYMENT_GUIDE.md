@@ -259,10 +259,28 @@ server {
     add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
 
     # Serve static files directly
-    location /static {
-        alias /var/www/potrazresearch/app/static;
+    location /static/ {
+        alias /var/www/potrazresearch/app/static/;
         expires 30d;
         add_header Cache-Control "public, no-transform";
+        
+        # Enable directory listing for debugging (remove in production)
+        autoindex off;
+        
+        # Handle missing files gracefully
+        try_files $uri $uri/ =404;
+        
+        # Security headers for static files
+        add_header X-Content-Type-Options nosniff;
+        
+        # MIME type handling
+        location ~* \.(js|css)$ {
+            add_header Cache-Control "public, max-age=2592000";
+        }
+        
+        location ~* \.(jpg|jpeg|png|gif|ico|svg)$ {
+            add_header Cache-Control "public, max-age=31536000";
+        }
     }
 
     # Handle file uploads (larger files)
@@ -321,7 +339,7 @@ sudo ufw --force enable
 sudo ufw status
 ```
 
-## Step 9: Create Required Directories
+## Step 9: Create Required Directories and Set Permissions
 
 ```bash
 # Create upload and download directories
@@ -329,10 +347,56 @@ sudo -u potraz mkdir -p /var/www/potrazresearch/uploads
 sudo -u potraz mkdir -p /var/www/potrazresearch/downloads
 sudo -u potraz mkdir -p /var/www/potrazresearch/logs
 
-# Set proper permissions
+# Set proper permissions for directories
 sudo chmod 755 /var/www/potrazresearch/uploads
 sudo chmod 755 /var/www/potrazresearch/downloads
 sudo chmod 755 /var/www/potrazresearch/logs
+```
+
+### Configure Static Files Permissions
+
+```bash
+# Ensure static files directory exists and has proper permissions
+sudo -u potraz mkdir -p /var/www/potrazresearch/app/static/css
+sudo -u potraz mkdir -p /var/www/potrazresearch/app/static/js
+sudo -u potraz mkdir -p /var/www/potrazresearch/app/static/images
+
+# Set permissions for static files directories
+sudo chmod -R 755 /var/www/potrazresearch/app/static
+sudo chown -R potraz:www-data /var/www/potrazresearch/app/static
+
+# Set permissions for all static files
+sudo find /var/www/potrazresearch/app/static -type f -exec chmod 644 {} \;
+sudo find /var/www/potrazresearch/app/static -type d -exec chmod 755 {} \;
+
+# Ensure nginx can read static files
+sudo usermod -a -G potraz www-data
+
+# Create CSS and JS files if they don't exist
+sudo -u potraz touch /var/www/potrazresearch/app/static/css/style.css
+sudo -u potraz touch /var/www/potrazresearch/app/static/js/main.js
+
+# Set correct permissions for new files
+sudo chmod 644 /var/www/potrazresearch/app/static/css/style.css
+sudo chmod 644 /var/www/potrazresearch/app/static/js/main.js
+```
+
+### Fix Common Static File Issues
+
+```bash
+# If logo.jpg is missing, you can download a placeholder or copy from local
+# For now, create a placeholder that won't break the site
+sudo -u potraz wget -O /var/www/potrazresearch/app/static/images/logo.jpg \
+    "https://via.placeholder.com/150x50/007bff/ffffff?text=POTRAZ" || \
+    sudo -u potraz touch /var/www/potrazresearch/app/static/images/logo.jpg
+
+# Set proper permissions for logo
+sudo chmod 644 /var/www/potrazresearch/app/static/images/logo.jpg
+
+# Verify static files are accessible
+sudo -u www-data test -r /var/www/potrazresearch/app/static/images/logo.jpg && echo "Logo accessible" || echo "Logo not accessible"
+sudo -u www-data test -r /var/www/potrazresearch/app/static/css/style.css && echo "CSS accessible" || echo "CSS not accessible"
+sudo -u www-data test -r /var/www/potrazresearch/app/static/js/main.js && echo "JS accessible" || echo "JS not accessible"
 ```
 
 ## Step 10: Final Verification
@@ -421,6 +485,74 @@ If the application isn't working:
 3. Check nginx: `sudo nginx -t && sudo systemctl status nginx`
 4. Check database connection: `mysql -u potplag -p potplag -e "SHOW TABLES;"`
 5. Check file permissions: `ls -la /var/www/potrazresearch/`
+
+### Static Files Not Loading (Images, CSS, JS)
+
+If images, CSS, or JavaScript files are not loading:
+
+```bash
+# 1. Check if static files exist
+ls -la /var/www/potrazresearch/app/static/
+ls -la /var/www/potrazresearch/app/static/images/
+ls -la /var/www/potrazresearch/app/static/css/
+ls -la /var/www/potrazresearch/app/static/js/
+
+# 2. Check file permissions
+sudo -u www-data test -r /var/www/potrazresearch/app/static/images/logo.jpg && echo "✓ Logo readable" || echo "✗ Logo not readable"
+sudo -u www-data test -r /var/www/potrazresearch/app/static/css/style.css && echo "✓ CSS readable" || echo "✗ CSS not readable"
+
+# 3. Test nginx static file serving directly
+curl -I http://localhost/static/images/logo.jpg
+curl -I http://localhost/static/css/style.css
+
+# 4. Check nginx error logs for static file issues
+sudo tail -f /var/log/nginx/potrazresearch_error.log
+
+# 5. Fix permissions if needed
+sudo chmod -R 755 /var/www/potrazresearch/app/static
+sudo chown -R potraz:www-data /var/www/potrazresearch/app/static
+sudo find /var/www/potrazresearch/app/static -type f -exec chmod 644 {} \;
+
+# 6. Restart nginx after permission changes
+sudo systemctl restart nginx
+
+# 7. Test from browser developer tools
+# Open browser developer tools (F12) and check the Network tab for 404 errors
+```
+
+### Missing CSS/JS Files
+
+If you're getting 404 errors for CSS or JS files:
+
+```bash
+# Create missing files
+sudo -u potraz touch /var/www/potrazresearch/app/static/css/style.css
+sudo -u potraz touch /var/www/potrazresearch/app/static/js/main.js
+
+# Add basic CSS content
+sudo -u potraz tee /var/www/potrazresearch/app/static/css/style.css << 'EOF'
+/* Custom styles for POTRAZ Research */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.navbar-brand img {
+    height: 35px;
+}
+EOF
+
+# Add basic JS content
+sudo -u potraz tee /var/www/potrazresearch/app/static/js/main.js << 'EOF'
+// Custom JavaScript for POTRAZ Research
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('POTRAZ Research application loaded');
+});
+EOF
+
+# Set proper permissions
+sudo chmod 644 /var/www/potrazresearch/app/static/css/style.css
+sudo chmod 644 /var/www/potrazresearch/app/static/js/main.js
+```
 
 ---
 
