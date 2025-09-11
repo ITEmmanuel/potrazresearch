@@ -41,6 +41,10 @@ class Document(db.Model):
     word_count = db.Column(db.Integer, default=0)
     report_path = db.Column(db.String(255), nullable=True)
     error_message = db.Column(db.Text, nullable=True)
+    
+    # Track upload state to prevent duplicate uploads
+    academi_uploaded = db.Column(db.Boolean, default=False)
+    academi_upload_time = db.Column(db.DateTime, nullable=True)
 
     # Computed/alias properties for template and route compatibility
     @property

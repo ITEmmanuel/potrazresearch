@@ -121,6 +121,7 @@ class DocumentProcessor:
 
     def upload_document(self, file_path):
         """Upload a document to academi.cx"""
+        unique_path = None
         try:
             print(f"📤 Uploading document: {os.path.basename(file_path)}")
 
@@ -145,6 +146,10 @@ class DocumentProcessor:
             except:
                 print("ℹ️  Upload appears to be automatic or submit button not found")
 
+            # Wait for upload to complete on academi.cx
+            print("⏳ Waiting 50 seconds for document to fully upload to academi.cx...")
+            time.sleep(50)
+            
             print("✅ Document uploaded successfully!")
             return unique_name
 
@@ -152,14 +157,28 @@ class DocumentProcessor:
             print(f"❌ Upload failed: {str(e)}")
             return None
         finally:
-            # Clean up temporary file
-            if os.path.exists(unique_path):
-                os.remove(unique_path)
+            # Clean up temporary file with retry mechanism
+            if unique_path and os.path.exists(unique_path):
+                max_retries = 5
+                for attempt in range(max_retries):
+                    try:
+                        os.remove(unique_path)
+                        print(f"🧹 Cleaned up temporary file: {unique_name}")
+                        break
+                    except PermissionError:
+                        if attempt < max_retries - 1:
+                            print(f"⏳ File locked, retrying cleanup in {attempt + 1} seconds...")
+                            time.sleep(attempt + 1)
+                        else:
+                            print(f"⚠️  Could not delete temporary file: {unique_path}")
+                    except Exception as cleanup_error:
+                        print(f"⚠️  Error during cleanup: {str(cleanup_error)}")
+                        break
 
     def extract_results(self, document_name):
-        """Extract plagiarism results from the current page"""
+        """Extract plagiarism results by downloading PDF report only"""
         try:
-            print("📊 Extracting results...")
+            print("📊 Looking for results...")
 
             # Find all "View Results" buttons/links
             results_buttons = WebDriverWait(self.driver, 30).until(
@@ -172,69 +191,36 @@ class DocumentProcessor:
                 print("⚠️  No results found yet. Document may still be processing.")
                 return None
 
+            print(f"📋 Found {len(results_buttons)} result(s), clicking the first one...")
+            
             # Click the first (most recent) result
             results_buttons[0].click()
 
-            # Wait for modal/results page
-            WebDriverWait(self.driver, 20).until(
+            # Wait for modal to open
+            print("⏳ Waiting for results modal to open...")
+            modal = WebDriverWait(self.driver, 20).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, "//div[contains(@class, 'modal-content') or contains(., 'Results')]")
+                    (By.XPATH, "//div[contains(@class, 'modal') or contains(., 'Results')]")
                 )
             )
+            
+            # Wait a moment for modal content to load
+            time.sleep(2)
 
-            # Extract document details
-            try:
-                doc_name_element = self.driver.find_element(
-                    By.XPATH, "//b[contains(text(), 'Document Name:')]/parent::p"
-                )
-                doc_name = doc_name_element.text.replace('Document Name:', '').strip()
-            except:
-                doc_name = document_name
-
-            try:
-                word_count_element = self.driver.find_element(
-                    By.XPATH, "//b[contains(text(), 'Word Count:')]/parent::p"
-                )
-                word_count = word_count_element.text.replace('Word Count:', '').strip()
-            except:
-                word_count = "N/A"
-
-            try:
-                ai_percentage_element = self.driver.find_element(
-                    By.XPATH, "//b[contains(text(), 'AI Percentage:')]/parent::p"
-                )
-                ai_percentage = ai_percentage_element.text.replace('AI Percentage:', '').strip()
-            except:
-                ai_percentage = "0%"
-
-            try:
-                similarity_percentage_element = self.driver.find_element(
-                    By.XPATH, "//b[contains(text(), 'Similarity Percentage:')]/parent::p"
-                )
-                similarity_percentage = similarity_percentage_element.text.replace('Similarity Percentage:', '').strip()
-            except:
-                similarity_percentage = "0%"
-
-            results = {
-                'document_name': doc_name,
-                'word_count': word_count,
-                'ai_percentage': ai_percentage,
-                'similarity_percentage': similarity_percentage,
-                'processed_at': datetime.utcnow()
-            }
-
-            print(f"✅ Results extracted: Similarity={similarity_percentage}, AI={ai_percentage}")
-
-            # Try to download similarity report
+            # Look for and click the download similarity report button
+            print("🔍 Looking for download similarity report button...")
             try:
                 download_btn = WebDriverWait(self.driver, 10).until(
                     EC.element_to_be_clickable(
                         (By.XPATH, "//button[contains(., 'Download similarity report')] | //a[contains(., 'Download similarity report')]")
                     )
                 )
+                
+                print("📥 Clicking download similarity report button...")
                 download_btn.click()
 
-                # Wait for download
+                # Wait for download to complete
+                print("⏳ Waiting for PDF download to complete...")
                 self.wait_for_download(timeout=60)
 
                 # Find the downloaded PDF and rename it
@@ -243,28 +229,52 @@ class DocumentProcessor:
                     latest_pdf = max(pdf_files, key=os.path.getctime)
                     report_name = os.path.splitext(document_name)[0] + "_similarity_report.pdf"
                     report_path = os.path.join(self.download_dir, report_name)
-                    os.rename(latest_pdf, report_path)
-                    results['report_path'] = report_path
-                    print(f"✅ Report downloaded: {report_name}")
+                    
+                    # Rename with retry mechanism
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            os.rename(latest_pdf, report_path)
+                            break
+                        except PermissionError:
+                            if attempt < max_retries - 1:
+                                time.sleep(2)
+                            else:
+                                # Use original filename if rename fails
+                                report_path = latest_pdf
+                    
+                    # Create minimal results with just the PDF
+                    results = {
+                        'document_name': document_name,
+                        'processed_at': datetime.utcnow(),
+                        'report_path': report_path
+                    }
+                    
+                    print(f"✅ PDF report downloaded successfully: {os.path.basename(report_path)}")
+                    
+                    # Close modal
+                    try:
+                        close_btn = self.driver.find_element(
+                            By.XPATH, "//button[contains(., '×')] | //span[contains(@class, 'close')] | //button[@data-dismiss='modal']"
+                        )
+                        close_btn.click()
+                        time.sleep(1)
+                    except:
+                        # Try pressing Escape key as fallback
+                        try:
+                            from selenium.webdriver.common.keys import Keys
+                            self.driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                        except:
+                            pass
+                    
+                    return results
+                else:
+                    print("❌ No PDF file found after download")
+                    return None
 
-            except Exception as e:
-                print(f"⚠️  Could not download report: {str(e)}")
-
-            # Close modal
-            try:
-                close_btn = self.driver.find_element(
-                    By.XPATH, "//button[contains(., '×')] | //span[contains(@class, 'close')]"
-                )
-                close_btn.click()
-                WebDriverWait(self.driver, 5).until(
-                    EC.invisibility_of_element_located(
-                        (By.XPATH, "//div[contains(@class, 'modal-content')]")
-                    )
-                )
-            except:
-                pass
-
-            return results
+            except Exception as download_error:
+                print(f"❌ Could not download report: {str(download_error)}")
+                return None
 
         except Exception as e:
             print(f"❌ Error extracting results: {str(e)}")
@@ -292,37 +302,51 @@ class DocumentProcessor:
                 if not self.driver:
                     if not self.login():
                         document.status = 'failed'
+                        document.error_message = 'Failed to login to academi.cx'
                         db.session.commit()
                         return False
 
-                # Upload the document
-                uploaded_name = self.upload_document(document.path)
-                if not uploaded_name:
-                    document.status = 'failed'
+                # Check if document was already uploaded to academi.cx
+                if not document.academi_uploaded:
+                    print("📤 Uploading document to academi.cx...")
+                    uploaded_name = self.upload_document(document.path)
+                    if not uploaded_name:
+                        document.status = 'failed'
+                        document.error_message = 'Failed to upload document to academi.cx'
+                        db.session.commit()
+                        return False
+                    
+                    # Mark as uploaded and save timestamp
+                    document.academi_uploaded = True
+                    document.academi_upload_time = datetime.utcnow()
                     db.session.commit()
-                    return False
+                    print("✅ Document uploaded successfully to academi.cx")
+                    
+                    # Initial wait after upload - academi.cx needs time to process the upload
+                    print("⏳ Waiting for initial processing on academi.cx...")
+                    time.sleep(30)
+                else:
+                    print("ℹ️  Document already uploaded to academi.cx, checking for results...")
 
-                # Wait for processing (this might take time)
-                print("⏳ Waiting for document processing...")
-                time.sleep(30)  # Initial wait
-
-                # Try to extract results (retry a few times)
-                max_retries = 10
+                # Try to extract results (retry mechanism for waiting)
+                max_retries = 40  # Increased for 500-700 second wait time
+                wait_time = 15    # Check every 15 seconds
+                
                 for attempt in range(max_retries):
-                    print(f"🔄 Attempt {attempt + 1}/{max_retries} to extract results...")
-                    results = self.extract_results(uploaded_name)
+                    elapsed_time = attempt * wait_time
+                    print(f"🔄 Attempt {attempt + 1}/{max_retries} to extract results... (elapsed: {elapsed_time}s)")
+                    
+                    results = self.extract_results(document.original_filename)
 
                     if results:
                         # Update document with results
                         document.status = 'completed'
                         document.processed_at = results['processed_at']
 
-                        # Store similarity score (extract number from percentage)
-                        try:
-                            similarity_str = results['similarity_percentage'].replace('%', '')
-                            document.similarity_score = float(similarity_str)
-                        except:
-                            document.similarity_score = 0.0
+                        # Only store what we have from the PDF download
+                        document.similarity_score = 0.0
+                        document.ai_percentage = 0.0
+                        document.word_count = 0
 
                         # Store report path if available
                         if 'report_path' in results:
@@ -334,11 +358,13 @@ class DocumentProcessor:
                         return True
 
                     # Wait before retry
-                    time.sleep(15)
+                    print(f"⏳ Results not ready yet, waiting {wait_time} seconds...")
+                    time.sleep(wait_time)
 
-                # If we get here, processing failed
-                print("❌ Document processing timed out")
+                # If we get here, processing timed out
+                print("❌ Document processing timed out after maximum retries")
                 document.status = 'failed'
+                document.error_message = 'Processing timed out - results not available after maximum wait time'
                 db.session.commit()
                 return False
 
@@ -346,6 +372,7 @@ class DocumentProcessor:
                 print(f"❌ Error processing document: {str(e)}")
                 try:
                     document.status = 'failed'
+                    document.error_message = str(e)
                     db.session.commit()
                 except:
                     pass
@@ -375,13 +402,38 @@ class DocumentProcessor:
 
 def process_document_background(document_id):
     """Background function to process a document - can be called from Flask routes"""
-    processor = DocumentProcessor()
-
-    try:
-        success = processor.process_document(document_id)
-        return success
-    finally:
-        processor.cleanup()
+    app = create_app()
+    
+    with app.app_context():
+        try:
+            # Check if credentials are set
+            if not os.getenv('ACADEMI_EMAIL') or not os.getenv('ACADEMI_PASSWORD'):
+                print("❌ ACADEMI_EMAIL and ACADEMI_PASSWORD environment variables not set")
+                document = Document.query.get(document_id)
+                if document:
+                    document.status = 'failed'
+                    db.session.commit()
+                return False
+                
+            processor = DocumentProcessor()
+            success = processor.process_document(document_id)
+            return success
+        except Exception as e:
+            print(f"❌ Background processing error: {str(e)}")
+            # Update document status to failed
+            try:
+                document = Document.query.get(document_id)
+                if document:
+                    document.status = 'failed'
+                    db.session.commit()
+            except:
+                pass
+            return False
+        finally:
+            try:
+                processor.cleanup()
+            except:
+                pass
 
 # For standalone testing
 if __name__ == '__main__':

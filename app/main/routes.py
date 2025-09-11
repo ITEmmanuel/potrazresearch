@@ -172,11 +172,14 @@ def reprocess_document(document_id):
         flash('You do not have permission to reprocess this document', 'danger')
         return redirect(url_for('main.dashboard'))
 
-    # Reset document status
+    # Reset document status and upload tracking
     document.status = 'processing'
     document.processed_at = None
     document.similarity_score = 0.0
     document.report_path = None
+    document.error_message = None
+    document.academi_uploaded = False  # Reset upload flag to allow re-upload
+    document.academi_upload_time = None
     db.session.commit()
 
     # Start background processing
@@ -215,6 +218,23 @@ def delete_document(document_id):
     
     flash('Document deleted successfully', 'success')
     return redirect(url_for('main.dashboard'))
+
+@bp.route('/document_status/<int:document_id>')
+@login_required
+def document_status(document_id):
+    """Get document processing status via AJAX"""
+    document = Document.query.get_or_404(document_id)
+    
+    # Ensure the user owns the document
+    if document.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    return jsonify({
+        'status': document.status,
+        'similarity_score': document.similarity_score,
+        'processed_at': document.processed_at.isoformat() if document.processed_at else None,
+        'report_available': bool(document.report_path)
+    })
 
 @bp.route('/health')
 def health_check():
