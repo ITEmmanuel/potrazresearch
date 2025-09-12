@@ -42,11 +42,10 @@ class DocumentProcessor:
         """Setup Chrome WebDriver with download preferences"""
         options = webdriver.ChromeOptions()
 
-        # Configure Chrome for headless operation in production
-        if os.getenv('FLASK_ENV') == 'production':
-            options.add_argument('--headless')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
+        # Always run in headless mode to avoid showing browser window
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
 
         # Download preferences
         prefs = {
@@ -180,21 +179,51 @@ class DocumentProcessor:
         try:
             print("📊 Looking for results...")
 
-            # Find all "View Results" buttons/links
-            results_buttons = WebDriverWait(self.driver, 30).until(
-                EC.presence_of_all_elements_located(
-                    (By.XPATH, "//button[contains(., 'View Results')] | //a[contains(., 'View Results')]")
-                )
-            )
+            # First, close any open modals that might be blocking clicks
+            print("🗂️  Closing any open modals...")
+            try:
+                # Try to close modal by clicking close button
+                close_buttons = self.driver.find_elements(By.XPATH,
+                    "//button[contains(., '×') or contains(@class, 'close') or @data-dismiss='modal'] | //span[contains(@class, 'close')]")
+                for close_btn in close_buttons:
+                    try:
+                        if close_btn.is_displayed():
+                            close_btn.click()
+                            time.sleep(1)
+                            break
+                    except:
+                        continue
 
-            if not results_buttons:
-                print("⚠️  No results found yet. Document may still be processing.")
+                # Try pressing Escape key as fallback
+                try:
+                    from selenium.webdriver.common.keys import Keys
+                    body = self.driver.find_element(By.TAG_NAME, 'body')
+                    body.send_keys(Keys.ESCAPE)
+                    time.sleep(1)
+                except:
+                    pass
+
+                # Wait for any modals to disappear
+                time.sleep(2)
+
+            except Exception as modal_error:
+                print(f"⚠️  Error closing modals: {str(modal_error)}")
+
+            # Find all document rows that contain the document name
+            document_rows = self.driver.find_elements(By.XPATH, f"//tr[contains(., '{document_name}')]")
+            
+            if not document_rows:
+                print(f"⚠️  No results found for document: {document_name}")
                 return None
 
-            print(f"📋 Found {len(results_buttons)} result(s), clicking the first one...")
+            print(f"📋 Found {len(document_rows)} matching document(s)")
             
-            # Click the first (most recent) result
-            results_buttons[0].click()
+            # Find the "View Results" button in the matching row
+            target_row = document_rows[0]  # Use the first matching row
+            results_button = target_row.find_element(By.XPATH, ".//button[contains(., 'View Results')] | .//a[contains(., 'View Results')]")
+            
+            print(f"🎯 Clicking results for document: {document_name}")
+            results_button.click()
 
             # Wait for modal to open
             print("⏳ Waiting for results modal to open...")
@@ -306,37 +335,64 @@ class DocumentProcessor:
                         db.session.commit()
                         return False
 
+                # Check if document is completed
+                if document.status == 'completed':
+                    print(f"ℹ️  Document already completed")
+                    return True
+                
+                # If document is in processing status, continue with the processing
+                if document.status == 'processing':
+                    print(f"ℹ️  Document in processing status, continuing with processing...")
+
                 # Check if document was already uploaded to academi.cx
                 if not document.academi_uploaded:
                     print("📤 Uploading document to academi.cx...")
-                    uploaded_name = self.upload_document(document.path)
-                    if not uploaded_name:
+                    print(f"📁 File path: {document.path}")
+                    print(f"📁 File exists: {os.path.exists(document.path)}")
+                    
+                    if not os.path.exists(document.path):
+                        print(f"❌ File not found at path: {document.path}")
                         document.status = 'failed'
-                        document.error_message = 'Failed to upload document to academi.cx'
+                        document.error_message = f'Uploaded file not found: {document.path}'
                         db.session.commit()
                         return False
+                    
+                    uploaded_name = self.upload_document(document.path)
+                    
+                    # Store the unique uploaded name for result extraction
+                    document.academi_upload_name = uploaded_name
                     
                     # Mark as uploaded and save timestamp
                     document.academi_uploaded = True
                     document.academi_upload_time = datetime.utcnow()
                     db.session.commit()
-                    print("✅ Document uploaded successfully to academi.cx")
+                    print(f"✅ Document uploaded successfully to academi.cx as: {uploaded_name}")
                     
                     # Initial wait after upload - academi.cx needs time to process the upload
                     print("⏳ Waiting for initial processing on academi.cx...")
-                    time.sleep(30)
                 else:
                     print("ℹ️  Document already uploaded to academi.cx, checking for results...")
 
                 # Try to extract results (retry mechanism for waiting)
                 max_retries = 40  # Increased for 500-700 second wait time
                 wait_time = 15    # Check every 15 seconds
+                print(f"DEBUG: max_retries={max_retries}, wait_time={wait_time}")
                 
+                # Use the unique uploaded name for result extraction
+                if document.academi_upload_name:
+                    search_name = document.academi_upload_name
+                    print(f"🔍 Searching for results using uploaded name: {search_name}")
+                else:
+                    # Fallback to original filename if upload name not available
+                    search_name = document.original_filename
+                    print(f"⚠️  Using original filename for search: {search_name}")
+                
+                print(f"DEBUG: About to start for loop with max_retries={max_retries}")
                 for attempt in range(max_retries):
                     elapsed_time = attempt * wait_time
                     print(f"🔄 Attempt {attempt + 1}/{max_retries} to extract results... (elapsed: {elapsed_time}s)")
                     
-                    results = self.extract_results(document.original_filename)
+                    results = self.extract_results(search_name)
 
                     if results:
                         # Update document with results
@@ -403,37 +459,53 @@ class DocumentProcessor:
 def process_document_background(document_id):
     """Background function to process a document - can be called from Flask routes"""
     app = create_app()
+    processor = None
     
     with app.app_context():
         try:
+            print(f"🚀 Starting background processing for document {document_id}")
+            
             # Check if credentials are set
-            if not os.getenv('ACADEMI_EMAIL') or not os.getenv('ACADEMI_PASSWORD'):
+            email = os.getenv('ACADEMI_EMAIL')
+            password = os.getenv('ACADEMI_PASSWORD')
+            print(f"📧 Email: {email[:5]}...{email[-10:] if email else 'None'}")
+            print(f"🔑 Password: {'*' * len(password) if password else 'None'}")
+            
+            if not email or not password:
                 print("❌ ACADEMI_EMAIL and ACADEMI_PASSWORD environment variables not set")
                 document = Document.query.get(document_id)
                 if document:
                     document.status = 'failed'
+                    document.error_message = 'Academi.cx credentials not configured'
                     db.session.commit()
                 return False
                 
             processor = DocumentProcessor()
+            print(f"✅ DocumentProcessor created, starting processing...")
             success = processor.process_document(document_id)
+            print(f"📊 Processing result: {success}")
             return success
         except Exception as e:
             print(f"❌ Background processing error: {str(e)}")
+            import traceback
+            print(f"📍 Full traceback: {traceback.format_exc()}")
             # Update document status to failed
             try:
                 document = Document.query.get(document_id)
                 if document:
                     document.status = 'failed'
+                    document.error_message = f'Processing error: {str(e)}'
                     db.session.commit()
-            except:
-                pass
+            except Exception as db_error:
+                print(f"❌ Database error while updating status: {str(db_error)}")
             return False
         finally:
             try:
-                processor.cleanup()
-            except:
-                pass
+                if processor:
+                    processor.cleanup()
+                    print("🧹 Processor cleanup completed")
+            except Exception as cleanup_error:
+                print(f"⚠️ Cleanup error: {str(cleanup_error)}")
 
 # For standalone testing
 if __name__ == '__main__':
